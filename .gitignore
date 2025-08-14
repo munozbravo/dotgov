@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Custom files
+.env
+
+# Custom directories
+scratchpad
