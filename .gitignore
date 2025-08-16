@@ -13,4 +13,7 @@ wheels/
 .env
 
 # Custom directories
-scratchpad
+scratchpad/
+
+# mkdocs
+site/
