@@ -23,6 +23,7 @@ build-backend = "uv_build"
 dev = [
     "bpython>=0.25",
     "marimo>=0.14.17",
+    "pandas>=2.3.2",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
     "responses>=0.25.8",
