@@ -31,7 +31,7 @@ dev = [
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = ["--import-mode=importlib", "-ra"]
 markers = [
     "unit: fast, offline tests using HTTP mocking",
     "integration: live Socrata API calls (opt-in)",
