@@ -58,12 +58,12 @@ class Socrata:
         ----------
         domain : str
             Target domain (without scheme)
-        version : float, optional
+        version : float
             SODA API version, default 2.1
-        app_token : str | None, optional
-            Socrata application token, default None
-        retries : int | None, optional
-            Number of attempts to retry request, default None
+        app_token : str | None
+            Socrata application token
+        retries : int | None
+            Number of attempts to retry request
         """
         if not domain:
             raise Exception("A domain is required.")
@@ -141,8 +141,8 @@ class Socrata:
 
         Parameters
         ----------
-        filters : dict | None, optional
-            Additional query parameters for the request, default None
+        filters : dict | None
+            Additional query parameters for the request
             (attribution, categories, domains, ids, only, provenance, query, tags, limit)
         """
         if not self.session:
@@ -392,7 +392,7 @@ class Socrata:
         ----------
         identifier : str
             Resource ID
-        filters : dict | None, optional
+        filters : dict | None
             Additional clause parameters for the request
             (select, where, group, having, order, limit, etc)
         """
