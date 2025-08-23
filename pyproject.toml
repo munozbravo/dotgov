@@ -8,8 +8,6 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "mkdocs>=1.6.1",
-    "mkdocs-material>=9.6.17",
     "pydantic>=2.11.7",
     "python-dotenv>=1.1.1",
     "requests>=2.32.4",
@@ -27,6 +25,12 @@ dev = [
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
     "responses>=0.25.8",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.6.18",
+    "mkdocstrings[python]>=0.30.0",
+    "pymdown-extensions>=10.16.1",
 ]
 
 [tool.pytest.ini_options]
