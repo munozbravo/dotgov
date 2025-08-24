@@ -2,7 +2,7 @@ import pytest
 import responses
 from responses import matchers
 
-from dotgov.socrata import Socrata
+from dotgov.socrata import Socrata, DiscoverFilters, ApprovalStatus, Only, Provenance
 
 
 pytestmark = pytest.mark.unit
@@ -73,14 +73,6 @@ def test_defaults_include_expected_query_params(
 
     for k in params:
         assert k in u
-
-
-@pytest.mark.parametrize("filter", ["approval_status", "provenance", "only"])
-def test_filter_validation_errors(socrata_default_client: Socrata, filter):
-    value = "not-a-valid-value"
-
-    with pytest.raises(ValueError):
-        list(socrata_default_client.discover(filters={filter: value}))
 
 
 def test_pagination_uses_limit_and_offset(
@@ -336,3 +328,69 @@ def test_format_payload_v30_default_limit_is_max(domain: str):
     assert payload["page"]["pageSize"] == Socrata.MAX_LIMIT
     # Minimal query when no clauses provided
     assert payload["query"] == "SELECT * "
+
+
+## Created after creating DiscoverFilters
+
+
+class DummyResponse:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"resultSetSize": 0, "results": []}
+
+
+class FakeSession:
+    def __init__(self):
+        self.headers = {}
+        self.last_params = None
+
+    def get(self, url, params=None, **kwargs):
+        self.last_params = params
+        return DummyResponse()
+
+    def close(self):
+        pass
+
+
+def run_discover_and_capture_params(socrata, filters=None):
+    socrata.session = FakeSession()
+    list(socrata.discover(filters=filters))
+    return socrata.session.last_params
+
+
+def test_default_filters_serialization():
+    s = Socrata(domain="example.org")
+    params = run_discover_and_capture_params(s)
+    assert params["approval_status"] == "approved"
+    assert params["only"] == "dataset"
+    assert params["provenance"] == "official"
+
+
+def test_dict_filters_serialization():
+    s = Socrata(domain="example.org")
+    params = run_discover_and_capture_params(
+        s,
+        {
+            "approval_status": ApprovalStatus.PENDING,
+            "only": Only.MAP,
+            "provenance": Provenance.COMMUNITY,
+        },
+    )
+    assert params["approval_status"] == "pending"
+    assert params["only"] == "map"
+    assert params["provenance"] == "community"
+
+
+def test_instance_filters_serialization():
+    s = Socrata(domain="example.org")
+    f = DiscoverFilters(
+        approval_status=ApprovalStatus.REJECTED,
+        only=Only.FILE,
+        provenance=Provenance.OFFICIAL,
+    )
+    params = run_discover_and_capture_params(s, f)
+    assert params["approval_status"] == "rejected"
+    assert params["only"] == "file"
+    assert params["provenance"] == "official"
