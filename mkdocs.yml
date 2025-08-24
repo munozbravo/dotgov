@@ -1,4 +1,61 @@
-site_name: My Docs
+site_name: dotgov
+site_description: Documentation for the dotgov project
+site_url: https://munozbravo.github.io/dotgov/
+repo_url: https://github.com/munozbravo/dotgov
+repo_name: munozbravo/dotgov
+edit_uri: edit/main/docs/
 
 theme:
   name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Introduction: index.md
+  - Guides:
+      - SODA API Versions: guides/versions.md
+      - Discover datasets: guides/discover.md
+      - Query a resource: guides/query-resource.md
+      - Build WHERE clauses: guides/where-clause.md
+      - Evergreen Data Library: guides/evergreen.md
+  - Examples:
+      - Chicago: examples/chicago/chicago.md
+      - Colombia: examples/colombia/colombia.md
+      - Seattle: examples/seattle/seattle.md
+  - API Reference:
+      - dotgov.socrata: api/socrata.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_object_full_path: false
+            members_order: source
+            inherited_members: true
+            merge_init_into_class: true
+            separate_signature: true
+            signature_crossrefs: true
+            show_if_no_docstring: false
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.snippets
+  - attr_list
+  - toc:
+      permalink: true
+
+strict: true
