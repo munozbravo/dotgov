@@ -1,6 +1,7 @@
 from enum import Enum
 import logging
 
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError
 from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError
 from urllib3.util.retry import Retry
@@ -10,9 +11,27 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-class Only(Enum):
+class Only(str, Enum):
+    """Field describing the datatype of an asset.
+
+    Allowed values are:
+
+    - ``CHART`` → "chart"
+    - ``DATASET`` → "dataset"
+    - ``FILE`` → "file"
+    - ``FILTER`` → "filter"
+    - ``LINK`` → "link"
+    - ``MAP`` → "map"
+    - ``MEASURE`` → "measure"
+    - ``STORY`` → "story"
+    - ``VISUALIZATION`` → "visualization"
+
+    See also: https://dev.socrata.com/docs/other/discovery#?route=cmp--parameters-only
+    """
+
     CHART = "chart"
     DATASET = "dataset"
+    FILE = "file"
     FILTER = "filter"
     LINK = "link"
     MAP = "map"
@@ -21,21 +40,116 @@ class Only(Enum):
     VISUALIZATION = "visualization"
 
 
-class Provenance(Enum):
+class Provenance(str, Enum):
+    """Field describing the provenance of an asset.
+
+    Allowed values are:
+
+    - ``OFFICIAL`` → "official"
+    - ``COMMUNITY`` → "community"
+
+    See also: https://dev.socrata.com/docs/other/discovery#?route=cmp--parameters-provenance
+    """
+
     OFFICIAL = "official"
     COMMUNITY = "community"
 
 
-class ApprovalStatus(Enum):
+class ApprovalStatus(str, Enum):
+    """Field describing the status of an asset.
+
+    Allowed values are:
+
+    - ``APPROVED`` → "approved"
+    - ``NOT_READY`` → "not_ready"
+    - ``PENDING`` → "pending"
+    - ``REJECTED`` → "rejected"
+
+    See also: https://dev.socrata.com/docs/other/discovery#?route=cmp--parameters-approval_status
+    """
+
     APPROVED = "approved"
     NOT_READY = "not_ready"
     PENDING = "pending"
     REJECTED = "rejected"
 
 
-class HTTPMethod(Enum):
+class HTTPMethod(str, Enum):
+    """Methods allowed for requests.
+
+    Allowed values are:
+
+    - ``GET`` → "get"
+    - ``POST`` → "post"
+    """
+
     GET = "get"
     POST = "post"
+
+
+class DiscoverFilters(BaseModel):
+    """Filters allowed for the Discover API.
+
+    Attributes
+    ----------
+    approval_status : ApprovalStatus
+        Status of an asset
+    attribution : str | None
+        Name of the attributing entity
+    categories : list[str] | None
+        Category of an asset
+    domains : list[str] | None
+        Domain name from which an asset comes
+    ids : list[str] | None
+        The four-by-four identifiers of assets
+    names : list[str] | None
+        Title of an asset
+    offset : int
+        The starting point for paging
+    only : Only
+        Datatype of an asset
+    provenance : Provenance
+        Provenance of an asset (official | community)
+    query : str | None
+        For search a string matching textual fields
+    q : str | None
+        Alias for query. String for matching textual fields.
+    tags : list[str] | None
+        Tags on an asset
+    limit : int
+        Max number of results per request
+
+
+    See also: https://dev.socrata.com/docs/other/discovery#?route=overview
+    """
+
+    # fixed filters
+
+    published: str = Field(default="true", frozen=True)
+    audience: str = Field(default="public", frozen=True)
+    explicitly_hidden: str = Field(default="false", frozen=True)
+
+    # user filters
+
+    approval_status: ApprovalStatus = Field(
+        default=ApprovalStatus.APPROVED, description="Status of an asset"
+    )
+    attribution: str | None = None
+    categories: list[str] | None = None
+    domains: list[str] | None = None
+    ids: list[str] | None = None
+    names: list[str] | None = None
+    offset: int = Field(default=0, ge=0, description="The starting point for paging")
+    only: Only = Only.DATASET
+    provenance: Provenance = Provenance.OFFICIAL
+    query: str | None = None
+    q: str | None = None
+    tags: list[str] | None = None
+    limit: PositiveInt = Field(
+        default=1000, ge=1, description="Max number of results per request"
+    )
+
+    model_config = ConfigDict(frozen=True, use_enum_values=True)
 
 
 class Socrata:
@@ -107,43 +221,31 @@ class Socrata:
             self.session = None
 
     def __enter__(self):
-        """Open session and return self for use in context manager."""
         self.open()
 
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Close session and optionally log exceptions.
-
-        Parameters
-        ----------
-        exc_type : type[BaseException] | None
-            Exception class raised in the `with` block or None if no exception.
-        exc_value : BaseException | None
-            Exception raised in the `with` block or None if no exception.
-        traceback : types.TracebackType | None
-            A traceback object containing the stack trace, or None if no exception.
-        """
         self.close()
 
         if exc_type:
             logger.error(f"Error during HTTP request: {exc_value}")
 
         # Returning False so exceptions propagate
+
         return False
 
     def discover(
         self,
-        filters: dict | None = None,
+        filters: DiscoverFilters | dict | None = None,
         **kwargs,
     ):
         """Returns datasets associated with the domain.
 
         Parameters
         ----------
-        filters : dict | None
+        filters : DiscoverFilters | dict | None
             Additional query parameters for the request
-            (attribution, categories, domains, ids, only, provenance, query, tags, limit)
         """
         if not self.session:
             self.open()
@@ -152,74 +254,31 @@ class Socrata:
         uri = "{}{}{}".format(self.PREFIX, self.domain, endpoint)
 
         n = 0
-        offset = 0
 
-        defaults = {
-            "published": "true",
-            "audience": "public",
-            "explicitly_hidden": "false",
-            "search_context": self.domain,
-            "approval_status": ApprovalStatus.APPROVED.value,
-            "provenance": Provenance.OFFICIAL.value,
-            "only": Only.DATASET.value,
-            "limit": self.MAX_LIMIT,
-            "offset": offset,
-        }
+        # Default filters
+
+        params = DiscoverFilters().model_dump(exclude_none=True, mode="json")
+        params = {"search_context": self.domain, **params}
 
         # Validate any provided filters
-        if filters:
-            possible = [
-                "approval_status",
-                "attribution",
-                "categories",
-                "domains",
-                "ids",
-                "names",
-                "only",
-                "provenance",
-                "query",
-                "q",
-                "tags",
-                "limit",
-            ]
 
-            for key, value in filters.items():
-                if key not in possible:
-                    raise TypeError(f"Unexpected keyword argument {key}")
+        try:
+            if filters and isinstance(filters, dict):
+                filters = DiscoverFilters(**filters)
 
-                if key == "approval_status" and value not in [
-                    s.value for s in ApprovalStatus
-                ]:
-                    values = [s.value for s in ApprovalStatus]
-                    raise ValueError(f"Value of {key} not in {values}")
+                params = filters.model_dump(exclude_none=True, mode="json")
 
-                if key == "provenance" and value not in [p.value for p in Provenance]:
-                    values = [p.value for p in Provenance]
-                    raise ValueError(f"Value of {key} not in {values}")
+                params = {"search_context": self.domain, **params}
 
-                if key == "only" and value not in [o.value for o in Only]:
-                    values = [o.value for o in Only]
-                    raise ValueError(f"Value of {key} not in {values}")
+            elif filters and isinstance(filters, DiscoverFilters):
+                params = filters.model_dump(exclude_none=True, mode="json")
 
-                for ks in ["attribution", "query", "q"]:
-                    if key == ks and not isinstance(value, str):
-                        raise ValueError(f"Value of {key} should be a string.")
+                params = {"search_context": self.domain, **params}
 
-                for kl in ["categories", "domains", "ids", "names", "tags"]:
-                    if key == kl and not isinstance(value, list):
-                        raise ValueError(f"Value of {key} should be a list of strings.")
+        except ValidationError as e:
+            logger.info(e)
 
-                if key == "limit" and not isinstance(value, int):
-                    raise ValueError(f"Value of {key} should be an integer.")
-
-            params = {k: filters.pop(k, None) for k in possible}
-
-            params = {k: v for k, v in params.items() if v is not None}
-
-            params = {**defaults, **params}
-
-        else:
-            params = defaults.copy()
+        offset = params.get("offset", 0)
 
         while True and self.session is not None:
             try:
@@ -453,14 +512,25 @@ class Socrata:
 
 
 def create_where_clause(**kwargs):
-    """Helper function to create WHERE clause.
+    """Build a WHERE clause for a query, assumes AND between provided arguments.
 
-    Assumes AND concatenation of kwargs, treatment differing based on value type.
-    Tuple (2) values are used as lower an upper bounds.
-    Int or Float values are used as greater than threshold.
-    Lists and Sets are used to match against a set of possible values `in(...)`.
-    Strings are used for fuzzy matching.
-    Tuples (3, 4) values for
+    Parameters
+    ----------
+    **kwargs
+        Arbitrary keyword arguments.
+
+        Keys are dataset dependent, value types determine usage.
+
+        key : tuple[str, str | int, int | float, float]
+            Values used as lower and upper bounds.
+        key : int | float
+            Values used as `greater than` threshold.
+        key : list | set
+            Values used to match against a set of possible values `in(...)`.
+        k : str
+            Values used for string fuzzy matching.
+        k : tuple
+            #TODO pending treatment for geospatial datatypes.
     """
     clause = ""
 
