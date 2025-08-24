@@ -516,21 +516,24 @@ def create_where_clause(**kwargs):
 
     Parameters
     ----------
-    **kwargs
+    **kwargs : dict
         Arbitrary keyword arguments.
 
-        Keys are dataset dependent, value types determine usage.
 
-        key : tuple[str, str | int, int | float, float]
-            Values used as lower and upper bounds.
-        key : int | float
-            Values used as `greater than` threshold.
-        key : list | set
-            Values used to match against a set of possible values `in(...)`.
-        k : str
-            Values used for string fuzzy matching.
-        k : tuple
-            #TODO pending treatment for geospatial datatypes.
+    Notes
+    -----
+    Keys are dataset dependent, value types determine usage.
+
+    - key : tuple[str, str | int, int | float, float]
+        Values used as lower and upper bounds.
+    - key : int | float
+        Values used as `greater than` threshold.
+    - key : list | set
+        Values used to match against a set of possible values `in(...)`.
+    - key : str
+        Values used for string fuzzy matching.
+    - key : tuple
+        Pending treatment for geospatial datatypes.
     """
     clause = ""
 
