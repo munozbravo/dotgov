@@ -21,7 +21,6 @@ nav:
       - SODA API Versions: guides/versions.md
       - Discover datasets: guides/discover.md
       - Query a resource: guides/query-resource.md
-      - Build WHERE clauses: guides/where-clause.md
       - Evergreen Data Library: guides/evergreen.md
   - Examples:
       - Chicago: examples/chicago/chicago.md
