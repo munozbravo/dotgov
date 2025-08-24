@@ -1,5 +1,7 @@
 # Discover datasets
 
+## **SODA API** based portal
+
 Use `Socrata.discover` to page through datasets:
 
 ```python
