@@ -2,15 +2,11 @@
 
 ## What is it?
 
-A lightweight Python library for accessing government Open Datasets using the SODA API.
-
-<!-- prettier-ignore -->
-!!! tip "Finding Open Datasets"
-    You can search the [Open Data Network](https://www.opendatanetwork.com/){target="\_blank"} for datasets from locations or subjects of interest around the world.
+A lightweight Python library for accessing government Open Datasets.
 
 ## Install
 
-Using uv:
+Inside your Python project run:
 
 ```bash
 uv add dotgov
@@ -20,9 +16,17 @@ uv add dotgov
 !!! info "What is `uv`?"
     `uv` is the recommended Python package and project manager.
 
-    You can find installation details for your platform in its [Installation](https://docs.astral.sh/uv/getting-started/installation/){target="\_blank"} page.
+    You can find installation details for your platform in `uv`'s [Installation](https://docs.astral.sh/uv/getting-started/installation/){target="\_blank"} page.
+
+    `uv add` assumes you are working in a [Python project](https://docs.astral.sh/uv/guides/projects/){target="\_blank"} with a virtual environment.
 
 ## Quickstart
+
+### **SODA API** based portal
+
+<!-- prettier-ignore -->
+!!! tip "Finding Open Datasets based on [SODA API](https://dev.socrata.com/consumers/getting-started){target="\_blank"}"
+    You can search the [Open Data Network](https://www.opendatanetwork.com/){target="\_blank"} for datasets from locations or subjects of interest around the world.
 
 A minimal example fetching records:
 
@@ -49,7 +53,7 @@ with Socrata(domain="data.seattle.gov", version=3.0, app_token=app_token) as s:
 
 <!-- prettier-ignore -->
 !!! info "What is `kzjm-xkqj`?"
-    In the Socrata SODA API, each dataset is identified by a unique 4x4 identifier.
+    In the SODA API each dataset is identified by a unique 4x4 identifier.
 
     For example, `kzjm-xkqj` is the dataset ID for **Seattle Real Time Fire 911 Calls**.
 
