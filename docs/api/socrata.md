@@ -8,6 +8,8 @@
 
 ::: dotgov.socrata.DiscoverFilters
 
+::: dotgov.socrata.Payload
+
 ::: dotgov.socrata.Socrata
 
 ::: dotgov.socrata.create_where_clause
