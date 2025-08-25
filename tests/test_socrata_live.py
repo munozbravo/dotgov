@@ -3,7 +3,7 @@ import os
 import pytest
 from dotenv import load_dotenv
 
-from dotgov.constants import COLOMBIA, COLOMBIA_PROCUREMENT
+from dotgov.constants import COLOMBIA
 from dotgov.socrata import Socrata
 
 
@@ -16,6 +16,9 @@ skip_live = pytest.mark.skipif(
 )
 
 _ = load_dotenv()
+
+
+identifier = "p6dx-8zbt"
 
 
 @skip_live
@@ -40,7 +43,9 @@ def test_fetch_some_resource():
         filters = dict(limit=n)
 
         got = list(
-            itertools.islice(s.query_resource(COLOMBIA_PROCUREMENT, filters=filters), n)
+            itertools.islice(
+                s.query_resource(identifier=identifier, filters=filters), n
+            )
         )
 
         assert len(got) == n
