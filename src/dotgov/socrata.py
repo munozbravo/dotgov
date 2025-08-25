@@ -1,7 +1,14 @@
 from enum import Enum
 import logging
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    ValidationError,
+    model_validator,
+)
 from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError
 from urllib3.util.retry import Retry
@@ -113,10 +120,10 @@ class DiscoverFilters(BaseModel):
     query : str | None
         For search a string matching textual fields
     q : str | None
-        Alias for query. String for matching textual fields.
+        Alias for query. String for matching textual fields
     tags : list[str] | None
         Tags on an asset
-    limit : int
+    limit : PositiveInt
         Max number of results per request
 
 
@@ -152,10 +159,121 @@ class DiscoverFilters(BaseModel):
     model_config = ConfigDict(frozen=True, use_enum_values=True)
 
 
+class Payload(BaseModel):
+    """Filters allowed for the SODA Consumer API.
+
+    Attributes
+    ----------
+    version : float
+        SODA API version, default 2.1
+    select : str | None
+        SELECT clause
+    where : str | None
+        WHERE clause
+    group : str | None
+        GROUP BY clause
+    having : str | None
+        HAVING clause
+    order : str | None
+        ORDER BY clause
+    limit : PositiveInt
+        Max number of results per request
+    timeout : int | None
+        Seconds before timing out the request
+    offset : int | None, default None
+        The starting point for paging (version 2.1 only)
+    page : int | None, default None
+        The starting point for paging (version 3.0 only)
+    q : str | None
+        String for matching textual fields (version 2.1 only)
+    parameters : dict | None
+        Not yet documented by Socrata (version 3.0 only)
+    includeSystem : bool, default False
+        Whether to include system columns (version 3.0 only)
+    includeSynthetic : bool, default True
+        Whether to include not-explicitly-requested columns (version 3.0 only)
+    """
+
+    # Core
+    version: float = 2.1
+    select: str | None = None
+    where: str | None = None
+    group: str | None = None
+    having: str | None = None
+    order: str | None = None
+    limit: PositiveInt = Field(
+        default=1000, ge=1, description="Max number of results per request"
+    )
+    timeout: int | None = None
+
+    # Conditionally allowed
+    offset: int | None = Field(
+        default=None,
+        ge=0,
+        description="The starting point for paging in API 2.1",
+    )
+    page: int | None = Field(
+        default=None,
+        ge=1,
+        description="The starting point for paging in API 3.0",
+    )
+    q: str | None = None
+    parameters: dict | None = None  # Not documented yet by Socrata
+    includeSystem: bool | None = None
+    includeSynthetic: bool | None = None
+
+    @model_validator(mode="after")
+    def enforce_rules(self):
+        v = self.version
+
+        base = {
+            "version",
+            "select",
+            "where",
+            "group",
+            "having",
+            "order",
+            "limit",
+            "timeout",
+        }
+
+        if v > 2.1:
+            allowed = base | {
+                "page",
+                "parameters",
+                "includeSystem",
+                "includeSynthetic",
+            }
+
+            if self.page is None:
+                self.page = 1
+
+            if self.includeSystem is None:
+                self.includeSystem = False
+
+            if self.includeSynthetic is None:
+                self.includeSynthetic = True
+
+        else:
+            allowed = base | {"offset", "q"}
+
+            if self.offset is None:
+                self.offset = 0
+
+        provided = set(self.model_dump(exclude_none=True).keys())
+
+        nogo = provided - allowed
+
+        if nogo:
+            raise ValueError(
+                f"Fields {', '.join(sorted(nogo))} not allowed for version {v}."
+            )
+
+        return self
+
+
 class Socrata:
     """Class to interact with SODA API"""
-
-    MAX_LIMIT = 1000
 
     PREFIX = "https://"
 
@@ -245,7 +363,7 @@ class Socrata:
         Parameters
         ----------
         filters : DiscoverFilters | dict | None
-            Additional query parameters for the request
+            Filters for the request (see DiscoverFilters)
         """
         if not self.session:
             self.open()
@@ -274,6 +392,9 @@ class Socrata:
                 params = filters.model_dump(exclude_none=True, mode="json")
 
                 params = {"search_context": self.domain, **params}
+
+            elif filters:
+                raise ValueError("Datatype of filters not accepted")
 
         except ValidationError as e:
             logger.info(e)
@@ -338,111 +459,99 @@ class Socrata:
 
         return fmtstr
 
-    def format_payload(self, filters: dict):
+    def format_payload(self, filters: Payload | dict):
         """Format required payload for request.
 
         Parameters
         ----------
-        filters : dict
-            Query parameters for the request
-            (select, where, group, having, order, limit, etc)
+        filters : Payload | dict
+            Filters for the request (see Payload)
         """
+        # Default filters
 
-        if "where" not in filters or not filters.get("where", ""):
+        params = Payload(version=self.version).model_dump(exclude_none=True)
+
+        try:
+            if isinstance(filters, dict):
+                filters = {**{"version": self.version}, **filters}
+                filters = Payload(**filters)
+
+                params = filters.model_dump(exclude_none=True)
+
+            elif isinstance(filters, Payload):
+                params = filters.model_dump(exclude_none=True)
+
+            else:
+                raise ValueError("Datatype of filters not accepted")
+
+        except ValidationError as e:
+            logger.info(e)
+
+        if "where" not in params:
             logger.info("WHERE clause recommended to filter data returned.")
 
-        if "order" not in filters or not filters.get("order", ""):
+        if "order" not in params:
             logger.info("ORDER clause recommended for deterministic pagination.")
 
         if self.version > 2.1:
-            page = 1
+            query = (
+                "SELECT * "
+                if "select" not in params
+                else f"SELECT {params.get('select')} "
+            )
 
-            query = "SELECT * "
+            query = (
+                query
+                if "where" not in params
+                else f"{query} WHERE {params.get('where')} "
+            )
 
-            minimal = {
+            query = (
+                query
+                if "group" not in params
+                else f"{query} GROUP BY {params.get('group')} "
+            )
+
+            if params.get("group") and params.get("having"):
+                query = f"{query} HAVING {params.get('having')} "
+
+            query = (
+                query
+                if "order" not in params
+                else f"{query} ORDER BY {params.get('order')}"
+            )
+
+            page = params.get("page", 1)
+            limit = params.get("limit")
+
+            payload = {
                 "query": query,
-                "page": {"pageNumber": page, "pageSize": self.MAX_LIMIT},
+                "page": {"pageNumber": page, "pageSize": limit},
             }
-
-            limit = filters.pop("limit", None)
-
-            if limit:
-                minimal["page"]["pageSize"] = limit
-
-            select = filters.pop("select", None)
-
-            if select:
-                query = f"SELECT {select} "
-
-            where = filters.pop("where", None)
-
-            if where:
-                query = f"{query} WHERE {where} "
-
-            group = filters.pop("group", None)
-
-            if group:
-                query = f"{query} GROUP BY {group} "
-
-            having = filters.pop("having", None)
-
-            if group and having:
-                query = f"{query} HAVING {having} "
-
-            order = filters.pop("order", None)
-
-            if order:
-                query = f"{query} ORDER BY {order}"
-
-            minimal.update({"query": query})
 
             extra = {
                 k: v
-                for k, v in filters.items()
+                for k, v in params.items()
                 if k
                 in [
-                    "parameters",
                     "timeout",
+                    "parameters",
                     "includeSystem",
                     "includeSynthetic",
                 ]
-                and v is not None
             }
 
-            payload = {**minimal, **extra}
+            payload = {**payload, **extra}
 
         else:
-            offset = 0
-
-            minimal = {"$offset": offset}
-
-            params = {
-                "$select": filters.pop("select", None),
-                "$where": filters.pop("where", None),
-                "$group": filters.pop("group", None),
-                "$having": filters.pop("having", None),
-                "$order": filters.pop("order", None),
-                "$limit": filters.pop("limit", self.MAX_LIMIT),
-            }
-
-            params = {k: v for k, v in params.items() if v is not None}
-
-            params = {**minimal, **params}
-
-            extra = {
-                f"${k}": v
-                for k, v in filters.items()
-                if k in ["q", "timeout"] and v is not None
-            }
-
-            payload = {**params, **extra}
+            payload = {f"${k}": v for k, v in params.items() if k != "version"}
 
         return payload
 
     def query_resource(
         self,
         identifier: str,
-        filters: dict | None = None,
+        filters: Payload | dict | None = None,
         **kwargs,
     ):
         """Returns the data for a specific dataset.
@@ -451,9 +560,8 @@ class Socrata:
         ----------
         identifier : str
             Resource ID
-        filters : dict | None
-            Additional clause parameters for the request
-            (select, where, group, having, order, limit, etc)
+        filters : Payload | dict | None
+            Filters for the request (see Payload)
         """
         endpoint = self.format_endpoint(identifier=identifier)
         uri = "{}{}{}".format(self.PREFIX, self.domain, endpoint)
@@ -468,8 +576,7 @@ class Socrata:
         else:
             logger.info("Filters recommended to limit amount of data returned.")
 
-            minimal = {"limit": self.MAX_LIMIT}
-            payload = self.format_payload(filters=minimal)
+            payload = self.format_payload(filters=Payload(version=self.version))
 
         while True and self.session is not None:
             try:
@@ -522,7 +629,9 @@ def create_where_clause(**kwargs):
 
     Notes
     -----
-    Keys are dataset dependent, value types determine usage.
+    Keys are dataset dependent. They represent fields (columns) in the dataset.
+
+    Value types determine usage.
 
     - key : tuple[str, str | int, int | float, float]
         Values used as lower and upper bounds.
@@ -532,7 +641,9 @@ def create_where_clause(**kwargs):
         Values used to match against a set of possible values `in(...)`.
     - key : str
         Values used for string fuzzy matching.
-    - key : tuple
+    - key : tuple[float, float, int]
+        Pending treatment for geospatial datatypes.
+    - key : tuple[float, float, ...]
         Pending treatment for geospatial datatypes.
     """
     clause = ""
