@@ -94,7 +94,7 @@ def test_pagination_uses_limit_and_offset(
 
     mocked.add(
         responses.GET,
-        re_url(CATALOG_PATH, f"offset={Socrata.MAX_LIMIT}"),
+        re_url(CATALOG_PATH, "offset=1000"),
         status=200,
         json={"resultSetSize": 2, "results": []},
     )
@@ -104,7 +104,7 @@ def test_pagination_uses_limit_and_offset(
     calls = [c.request.url or "" for c in mocked.calls]
 
     assert [r["resource"]["id"] for r in rows] == ["a", "b"]
-    assert any(f"offset={Socrata.MAX_LIMIT}" in c for c in calls)
+    assert any("offset=1000" in c for c in calls)
 
 
 ## Endpoints
@@ -275,7 +275,7 @@ def test_format_payload_v21_default_limit_is_max(domain: str):
 
     payload = s.format_payload(filters={})
 
-    assert payload["$limit"] == Socrata.MAX_LIMIT
+    assert payload["$limit"] == 1000
     assert payload["$offset"] == 0
 
 
@@ -296,7 +296,7 @@ def test_format_payload_v30_builds_query_and_page_and_extras(domain: str):
         "includeSynthetic": False,
     }
 
-    payload = s.format_payload(filters=filters.copy())
+    payload = s.format_payload(filters=filters)
 
     # Page object present with provided limit
     assert payload["page"]["pageNumber"] == 1
@@ -325,7 +325,7 @@ def test_format_payload_v30_default_limit_is_max(domain: str):
     payload = s.format_payload(filters={})
 
     assert payload["page"]["pageNumber"] == 1
-    assert payload["page"]["pageSize"] == Socrata.MAX_LIMIT
+    assert payload["page"]["pageSize"] == 1000
     # Minimal query when no clauses provided
     assert payload["query"] == "SELECT * "
 
